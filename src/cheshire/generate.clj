@@ -61,30 +61,36 @@
   (let [jg (tag jg)]
     `(do
        (.writeStartObject ~jg)
-       (doseq [m# ~obj]
-         (let [k# (key m#)
-               v# (val m#)]
-           (.writeFieldName ~jg (if (keyword? k#)
-                                  (.substring (str k#) 1)
-                                  (str k#)))
-           (generate ~jg v# ~date-format ~e nil)))
+       (loop [obj# ~obj]
+         (when (seq obj#)
+           (let [m# (first obj#)
+                 k# (key m#)
+                 v# (val m#)
+                 obj# (dissoc obj# k#)]
+             (.writeFieldName ~jg (if (keyword? k#)
+                                    (.substring (str k#) 1)
+                                    (str k#)))
+             (generate ~jg v# ~date-format ~e nil)
+             (recur obj#))))
        (.writeEndObject ~jg))))
 
 (definline generate-key-fn-map
   [^JsonGenerator jg obj ^String date-format ^Exception e key-fn]
-  (let [k (gensym 'k)
-        name (gensym 'name)
-        jg (tag jg)]
+  (let [jg (tag jg)]
     `(do
        (.writeStartObject ~jg)
-       (doseq [m# ~obj]
-         (let [~k (key m#)
-               v# (val m#)
-               ^String name# (if (keyword? ~k)
-                               (~key-fn ~k)
-                               (str ~k))]
-           (.writeFieldName ~jg name#)
-           (generate ~jg v# ~date-format ~e ~key-fn)))
+       (loop [obj# ~obj]
+         (when (seq obj#)
+           (let [m# (first obj#)
+                 k# (key m#)
+                 v# (val m#)
+                 obj# (dissoc obj# k#)
+                 ^String name# (if (keyword? k#)
+                                 (~key-fn k#)
+                                 (str k#))]
+             (.writeFieldName ~jg name#)
+             (generate ~jg v# ~date-format ~e ~key-fn)
+             (recur obj#))))
        (.writeEndObject ~jg))))
 
 (definline generate-map
@@ -211,13 +217,17 @@
   "Encode a clojure map to the json generator."
   [^clojure.lang.IPersistentMap m ^JsonGenerator jg]
   (.writeStartObject jg)
-  (doseq [[k v] m]
-    (.writeFieldName jg (if (instance? clojure.lang.Keyword k)
-                          (if-let [ns (namespace k)]
-                            (str ns "/" (name k))
-                            (name k))
-                          (str k)))
-    (generate jg v *date-format* nil nil))
+  (loop [m m]
+    (when (seq m)
+      (let [[k v] (first m)
+            m (dissoc m k)]
+        (.writeFieldName jg (if (instance? clojure.lang.Keyword k)
+                              (if-let [ns (namespace k)]
+                                (str ns "/" (name k))
+                                (name k))
+                              (str k)))
+        (generate jg v *date-format* nil nil)
+        (recur m))))
   (.writeEndObject jg))
 
 (defn encode-symbol
